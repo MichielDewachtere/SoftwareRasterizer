@@ -9,6 +9,8 @@
 #include "Texture.h"
 #include "Utils.h"
 
+#define INT int
+
 using namespace dae;
 
 Renderer::Renderer(SDL_Window* pWindow) :
@@ -49,39 +51,8 @@ void Renderer::Render()
 	//Render_W1_Part1();	// Rasterizer Stage Only
 	//Render_W1_Part2();	// Projection Stage (Camera)
 	//Render_W1_Part3();	// Barycentric Coordinates
-	Render_W1_Part4();	// Depth Buffer
-	//Render_W1_Part5();	// BoundingBox Optimization
-
-	// Define Triangle - Vertices in NDC space
-	//std::vector<Vector3> vertices_ndc
-	//{
-	//	{ 0.f, .5f, 1.f },
-	//	{ .5f, -.5f, 1.f },
-	//	{ -.5f, -.5f, 1.f }
-	//};
-
-	////RENDER LOGIC
-	//for (int px{}; px < m_Width; ++px)
-	//{
-	//	for (int py{}; py < m_Height; ++py)
-	//	{
-	//		float gradient = px / static_cast<float>(m_Width);
-	//		gradient += py / static_cast<float>(m_Width);
-	//		gradient /= 2.0f;
-
-	//		ColorRGB finalColor{ gradient, gradient, gradient };
-
-
-
-	//		//Update Color in Buffer
-	//		finalColor.MaxToOne();
-
-	//		m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
-	//			static_cast<uint8_t>(finalColor.r * 255),
-	//			static_cast<uint8_t>(finalColor.g * 255),
-	//			static_cast<uint8_t>(finalColor.b * 255));
-	//	}
-	//}
+	//Render_W1_Part4();	// Depth Buffer
+	Render_W1_Part5();	// BoundingBox Optimization
 
 	//@END
 	//Update SDL Surface
@@ -410,16 +381,128 @@ void dae::Renderer::Render_W1_Part4()
 			}
 		}
 	}
-
 }
 
 
 void dae::Renderer::Render_W1_Part5()
 {
+	// Fill the array with max float value
+	std::fill_n(m_pDepthBufferPixels, m_Width * m_Height, FLT_MAX);
+
+	ClearBackground();
+
+	std::vector<Vertex> vertices_world
+	{
+		// Triangle 0
+		{{0.f,2.f,0.f},{1,0,0}},
+		{{1.5f,-1.f,0.f},{1,0,0}},
+		{{-1.5f,-1.f,0.f},{1,0,0}},
+
+		// Triangle 1
+		{{0.f,4.f,2.f},{1,0,0}},
+		{{3.f,-2.f,2.f},{0,1,0}},
+		{{-3.f,-2.f,2.f},{0,0,1}}
+	};
+
+	std::vector<Vertex> vertices_raster{};
+
+	VertexTransformationFunction(vertices_world, vertices_raster);
+
+	ColorRGB finalColor{ };
+
+	for (size_t i{}; i < vertices_raster.size(); i += 3)
+	{
+		const Vector2 v0 = { vertices_raster[i].position.x,	vertices_raster[i].position.y };
+		const Vector2 v1 = { vertices_raster[i + 1].position.x,	vertices_raster[i + 1].position.y };
+		const Vector2 v2 = { vertices_raster[i + 2].position.x,	vertices_raster[i + 2].position.y };
+
+		ColorRGB colorV0 = vertices_raster[i].color;
+		ColorRGB colorV1 = vertices_raster[i + 1].color;
+		ColorRGB colorV2 = vertices_raster[i + 2].color;
+
+		const Vector2 edge01 = v1 - v0;
+		const Vector2 edge12 = v2 - v1;
+		const Vector2 edge20 = v0 - v2;
+
+		const float areaTriangle = Vector2::Cross(v1 - v0, v2 - v0);
+
+		Vector2 topLeft = { std::min(std::min(v0.x,v1.x),v2.x),	std::max(std::max(v0.y,v1.y),v2.y) };
+		Vector2 bottomRight = { std::max(std::max(v0.x,v1.x),v2.x), std::min(std::min(v0.y,v1.y),v2.y) };
+
+		const INT top = std::max((INT)std::max(v0.y, v1.y), (INT)v2.y);
+		const INT left = std::min((INT)std::min(v0.x, v1.x), (INT)v2.x);
+		const INT bottom = std::min((INT)std::min(v0.y, v1.y), (INT)v2.y);
+		const INT right = std::max((INT)std::max(v0.x, v1.x), (INT)v2.x);
+
+		if (left <= 0 || right >= (m_Width - 1))
+			continue;
+
+		if (bottom <= 0 || left >= (m_Height - 1))
+			continue;
+
+		for (INT px = left; px < right; ++px)
+		{
+			for (INT py = bottom; py < top; ++py)
+			{
+				finalColor = colors::Black;
+
+				Vector2 pixel = { (float)px,(float)py };
+
+				//if (pixel.x < topLeft.x || pixel.x > bottomRight.x)
+				//	continue;
+
+				//if (pixel.y < bottomRight.y || pixel.y > topLeft.y)
+				//	continue;
+
+				const Vector2 directionV0 = pixel - v0;
+				const Vector2 directionV1 = pixel - v1;
+				const Vector2 directionV2 = pixel - v2;
+
+				float weightV2 = Vector2::Cross(edge01, directionV0);
+				if (weightV2 < 0)
+					continue;
+
+				float weightV0 = Vector2::Cross(edge12, directionV1);
+				if (weightV0 < 0)
+					continue;
+
+				float weightV1 = Vector2::Cross(edge20, directionV2);
+				if (weightV1 < 0)
+					continue;
+
+				weightV0 /= areaTriangle;
+				weightV1 /= areaTriangle;
+				weightV2 /= areaTriangle;
+
+				const float depthWeight =
+				{
+					weightV0 * vertices_raster[i].position.z +
+					weightV1 * vertices_raster[i + 1].position.z +
+					weightV2 * vertices_raster[i + 2].position.z
+				};
+
+				if (depthWeight > m_pDepthBufferPixels[px + (py * m_Width)])
+					continue;
+
+				m_pDepthBufferPixels[px + (py * m_Width)] = depthWeight;
+
+				finalColor = colorV0 * weightV0 + colorV1 * weightV1 + colorV2 * weightV2;
+
+				//Update Color in Buffer
+				finalColor.MaxToOne();
+
+				m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
+					static_cast<uint8_t>(finalColor.r * 255),
+					static_cast<uint8_t>(finalColor.g * 255),
+					static_cast<uint8_t>(finalColor.b * 255));
+			}
+		}
+	}	
 }
 
-void dae::Renderer::Render_W5_Part1()
+void dae::Renderer::ClearBackground() const
 {
+	SDL_FillRect(m_pBackBuffer, NULL, SDL_MapRGB(m_pBackBuffer->format, 100, 100, 100));
 }
 
 bool Renderer::SaveBufferToImage() const
