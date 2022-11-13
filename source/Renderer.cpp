@@ -93,6 +93,26 @@ void Renderer::Render()
 void Renderer::VertexTransformationFunction(const std::vector<Vertex>& vertices_in, std::vector<Vertex>& vertices_out) const
 {
 	//Todo > W1 Projection Stage
+	vertices_out.reserve(vertices_in.size());
+
+	for (Vertex vertex : vertices_in)
+	{
+		// to view space
+		vertex.position = m_Camera.viewMatrix.TransformPoint(vertex.position);
+
+		// to projection space
+		vertex.position.x = vertex.position.x / vertex.position.z;
+		vertex.position.y = vertex.position.y / vertex.position.z;
+
+		vertex.position.x = vertex.position.x / (m_Camera.fov * m_AspectRatio);
+		vertex.position.y = vertex.position.y / m_Camera.fov;
+
+		// to screen/raster space
+		vertex.position.x = (vertex.position.x + 1) / 2.f * m_Width;
+		vertex.position.y = (1 - vertex.position.y) / 2.f * m_Height;
+
+		vertices_out.push_back(vertex);
+	}
 }
 
 void dae::Renderer::Render_W1_Part1()
@@ -156,9 +176,71 @@ void dae::Renderer::Render_W1_Part1()
 	}
 }
 
-void dae::Renderer::Render_W2_Part1()
+void dae::Renderer::Render_W1_Part2()
 {
+	std::vector<Vertex> vertices_world
+	{
+		{{0.f,2.f,0.f}},
+		{{1.f,0.f,0.f}},
+		{{-1.f,0.f,0.f}}
+	};
 
+	std::vector<Vertex> vertices_raster{};
+
+	VertexTransformationFunction(vertices_world, vertices_raster);
+
+	std::vector<Vector2> vertices_raster2D{};
+
+	for (const auto& vertex : vertices_raster)
+	{
+		vertices_raster2D.push_back({ vertex.position.x,vertex.position.y });
+	}
+
+	ColorRGB finalColor{ 1, 1, 1 };
+
+	for (size_t i{}; i < vertices_raster2D.size(); i += 3)
+	{
+		const Vector2 v0 = vertices_raster2D[i];
+		const Vector2 v1 = vertices_raster2D[i + 1];
+		const Vector2 v2 = vertices_raster2D[i + 2];
+
+		const Vector2 edge01 = v1 - v0;
+		const Vector2 edge12 = v2 - v1;
+		const Vector2 edge20 = v0 - v2;
+
+		for (int px{}; px < m_Width; ++px)
+		{
+			for (int py{}; py < m_Height; ++py)
+			{
+
+				Vector2 pixel = { (float)px,(float)py };
+
+				const Vector2 directionV0 = pixel - v0;
+				const Vector2 directionV1 = pixel - v1;
+				const Vector2 directionV2 = pixel - v2;
+
+				const float a = Vector2::Cross(directionV0, edge01);
+				if (a > 0)
+					continue;
+
+				const float b = Vector2::Cross(directionV1, edge12);
+				if (b > 0)
+					continue;
+
+				const float c = Vector2::Cross(directionV2, edge20);
+				if (c > 0)
+					continue;
+
+				//Update Color in Buffer
+				finalColor.MaxToOne();
+
+				m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
+					static_cast<uint8_t>(finalColor.r * 255),
+					static_cast<uint8_t>(finalColor.g * 255),
+					static_cast<uint8_t>(finalColor.b * 255));
+			}
+		}
+	}
 }
 
 void dae::Renderer::Render_W1_Part3()
