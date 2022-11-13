@@ -448,12 +448,6 @@ void dae::Renderer::Render_W1_Part5()
 
 				Vector2 pixel = { (float)px,(float)py };
 
-				//if (pixel.x < topLeft.x || pixel.x > bottomRight.x)
-				//	continue;
-
-				//if (pixel.y < bottomRight.y || pixel.y > topLeft.y)
-				//	continue;
-
 				const Vector2 directionV0 = pixel - v0;
 				const Vector2 directionV1 = pixel - v1;
 				const Vector2 directionV2 = pixel - v2;
