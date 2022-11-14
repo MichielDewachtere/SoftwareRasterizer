@@ -425,9 +425,6 @@ void dae::Renderer::Render_W1_Part5()
 
 		const float areaTriangle = Vector2::Cross(v1 - v0, v2 - v0);
 
-		//Vector2 topLeft = { std::min(std::min(v0.x,v1.x),v2.x),	std::max(std::max(v0.y,v1.y),v2.y) };
-		//Vector2 bottomRight = { std::max(std::max(v0.x,v1.x),v2.x), std::min(std::min(v0.y,v1.y),v2.y) };
-
 		const INT top = std::max((INT)std::max(v0.y, v1.y), (INT)v2.y);
 		const INT bottom = std::min((INT)std::min(v0.y, v1.y), (INT)v2.y);
 
@@ -443,20 +440,10 @@ void dae::Renderer::Render_W1_Part5()
 		for (INT px = left; px < right; ++px)
 		{
 			for (INT py = bottom; py < top; ++py)
-
-		//for (int px{}; px < m_Width; ++px)
-		//{
-		//	for (int py{}; py < m_Height; ++py)
 			{
 				finalColor = colors::Black;
 
 				Vector2 pixel = { (float)px,(float)py };
-
-				//if (pixel.x < left || pixel.x > right)
-				//	continue;
-
-				//if (pixel.y < bottom || pixel.y > top)
-				//	continue;
 
 				const Vector2 directionV0 = pixel - v0;
 				const Vector2 directionV1 = pixel - v1;
