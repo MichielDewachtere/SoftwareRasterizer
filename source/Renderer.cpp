@@ -52,7 +52,12 @@ void Renderer::Render()
 	//Render_W1_Part2();	// Projection Stage (Camera)
 	//Render_W1_Part3();	// Barycentric Coordinates
 	//Render_W1_Part4();	// Depth Buffer
-	Render_W1_Part5();	// BoundingBox Optimization
+	//Render_W1_Part5();	// BoundingBox Optimization
+
+	Render_W2_Part1();	// QUAD (TriangleList)
+	//Render_W2_Part2();	//QUAD (TriangleStrip)
+	//Render_W2_Part3();	// Texture
+	//Render_W2_Part4();	// Correct Interpolation
 
 	//@END
 	//Update SDL Surface
@@ -61,7 +66,7 @@ void Renderer::Render()
 	SDL_UpdateWindowSurface(m_pWindow);
 }
 
-void Renderer::VertexTransformationFunction(const std::vector<Vertex>& vertices_in, std::vector<Vertex>& vertices_out) const
+void Renderer::VertexTransformationFunction_W1(const std::vector<Vertex>& vertices_in, std::vector<Vertex>& vertices_out) const
 {
 	//Todo > W1 Projection Stage
 	vertices_out.reserve(vertices_in.size());
@@ -85,7 +90,38 @@ void Renderer::VertexTransformationFunction(const std::vector<Vertex>& vertices_
 		vertices_out.push_back(vertex);
 	}
 }
+void dae::Renderer::VertexTransformationFunction_W2(const std::vector<Mesh>& meshes_in, std::vector<Mesh>& meshes_out) const
+{
+	//Todo > W1 Projection Stage
+	meshes_out.reserve(meshes_in.size());
 
+	for (Mesh mesh : meshes_in)
+	{
+		meshes_out.push_back(mesh);
+		meshes_out[0].vertices.clear();
+		meshes_out[0].vertices.reserve(mesh.vertices.size());
+
+		for (Vertex vertex : mesh.vertices)
+		{
+			// to view space
+			vertex.position = m_Camera.viewMatrix.TransformPoint(vertex.position);
+
+			// to projection space
+			vertex.position.x = vertex.position.x / vertex.position.z;
+			vertex.position.y = vertex.position.y / vertex.position.z;
+
+			vertex.position.x = vertex.position.x / (m_Camera.fov * m_AspectRatio);
+			vertex.position.y = vertex.position.y / m_Camera.fov;
+
+			// to screen/raster space
+			vertex.position.x = (vertex.position.x + 1) / 2.f * m_Width;
+			vertex.position.y = (1 - vertex.position.y) / 2.f * m_Height;
+
+			meshes_out[0].vertices.push_back(vertex);
+		}
+	}
+}
+#pragma region week1
 void dae::Renderer::Render_W1_Part1()
 {
 	std::vector<Vector3> vertices_ndc
@@ -158,7 +194,7 @@ void dae::Renderer::Render_W1_Part2()
 
 	std::vector<Vertex> vertices_raster{};
 
-	VertexTransformationFunction(vertices_world, vertices_raster);
+	VertexTransformationFunction_W1(vertices_world, vertices_raster);
 
 	std::vector<Vector2> vertices_raster2D{};
 
@@ -225,7 +261,7 @@ void dae::Renderer::Render_W1_Part3()
 
 	std::vector<Vertex> vertices_raster{};
 
-	VertexTransformationFunction(vertices_world, vertices_raster);
+	VertexTransformationFunction_W1(vertices_world, vertices_raster);
 
 	ColorRGB finalColor{ };
 
@@ -309,7 +345,7 @@ void dae::Renderer::Render_W1_Part4()
 
 	std::vector<Vertex> vertices_raster{};
 
-	VertexTransformationFunction(vertices_world, vertices_raster);
+	VertexTransformationFunction_W1(vertices_world, vertices_raster);
 
 	ColorRGB finalColor{ };
 
@@ -405,7 +441,7 @@ void dae::Renderer::Render_W1_Part5()
 
 	std::vector<Vertex> vertices_raster{};
 
-	VertexTransformationFunction(vertices_world, vertices_raster);
+	VertexTransformationFunction_W1(vertices_world, vertices_raster);
 
 	ColorRGB finalColor{ };
 
@@ -493,6 +529,171 @@ void dae::Renderer::Render_W1_Part5()
 			}
 		}
 	}	
+}
+#pragma endregion
+void dae::Renderer::Render_W2_Part1()
+{
+	// Fill the array with max float value
+	std::fill_n(m_pDepthBufferPixels, m_Width * m_Height, FLT_MAX);
+
+	ClearBackground();
+
+	std::vector<Mesh> meshes_world
+	{
+		Mesh{
+			{
+			Vertex{{-3,3,-2}},
+			Vertex{{0,3,-2}},
+			Vertex{{3,3,-2}},
+			Vertex{{-3,0,-2}},
+			Vertex{{0,0,-2}},
+			Vertex{{3,0,-2}},
+			Vertex{{-3,-3,-2}},
+			Vertex{{0,-3,-2}},
+			Vertex{{3,-3,-2}}
+			},
+
+			{
+				3,0,1,	1,4,3,	4,1,2,
+				2,5,4,	6,3,4,	4,7,6,
+				7,4,5,	5,8,7
+			},
+
+		PrimitiveTopology::TriangleList
+		}
+	};
+
+	std::vector<Mesh> meshes_raster{};
+
+	VertexTransformationFunction_W2(meshes_world, meshes_raster);
+
+	ColorRGB finalColor{ };
+
+	for (size_t i{}; i < meshes_raster[0].indices.size(); i += 3)
+	{
+		const Mesh mesh = meshes_raster[0];
+
+		const Vector2 v0 = { mesh.vertices[mesh.indices[i]].position.x, mesh.vertices[mesh.indices[i]].position.y };
+		const Vector2 v1 = { mesh.vertices[mesh.indices[i + 1]].position.x, mesh.vertices[mesh.indices[i + 1]].position.y };
+		const Vector2 v2 = { mesh.vertices[mesh.indices[i + 2]].position.x, mesh.vertices[mesh.indices[i + 2]].position.y };
+		
+		ColorRGB colorV0 = mesh.vertices[mesh.indices[i]].color;
+		ColorRGB colorV1 = mesh.vertices[mesh.indices[i + 1]].color;
+		ColorRGB colorV2 = mesh.vertices[mesh.indices[i + 2]].color;
+
+		const Vector2 edge01 = v1 - v0;
+		const Vector2 edge12 = v2 - v1;
+		const Vector2 edge20 = v0 - v2;
+
+		const float areaTriangle = Vector2::Cross(v1 - v0, v2 - v0);
+
+		const INT top = std::max((INT)std::max(v0.y, v1.y), (INT)v2.y);
+		const INT bottom = std::min((INT)std::min(v0.y, v1.y), (INT)v2.y);
+
+		const INT left = std::min((INT)std::min(v0.x, v1.x), (INT)v2.x);
+		const INT right = std::max((INT)std::max(v0.x, v1.x), (INT)v2.x);
+
+		if (left <= 0 || right >= (m_Width - 1))
+			continue;
+
+		if (bottom <= 0 || top >= (m_Height - 1))
+			continue;
+
+		for (INT px = left; px < right; ++px)
+		{
+			for (INT py = bottom; py < top; ++py)
+			{
+				finalColor = colors::Black;
+
+				Vector2 pixel = { (float)px,(float)py };
+
+				const Vector2 directionV0 = pixel - v0;
+				const Vector2 directionV1 = pixel - v1;
+				const Vector2 directionV2 = pixel - v2;
+
+				float weightV2 = Vector2::Cross(edge01, directionV0);
+				if (weightV2 < 0)
+					continue;
+
+				float weightV0 = Vector2::Cross(edge12, directionV1);
+				if (weightV0 < 0)
+					continue;
+
+				float weightV1 = Vector2::Cross(edge20, directionV2);
+				if (weightV1 < 0)
+					continue;
+
+				weightV0 /= areaTriangle;
+				weightV1 /= areaTriangle;
+				weightV2 /= areaTriangle;
+
+				if (weightV0 + weightV1 + weightV2 < 1 - FLT_EPSILON
+					&& weightV0 + weightV1 + weightV2 > 1 + FLT_EPSILON)
+					continue;
+
+				const float depthWeight =
+				{
+					weightV0 * mesh.vertices[mesh.indices[i]].position.z +
+					weightV1 * mesh.vertices[mesh.indices[i + 1]].position.z +
+					weightV2 * mesh.vertices[mesh.indices[i + 2]].position.z
+				};
+
+				if (depthWeight > m_pDepthBufferPixels[px + (py * m_Width)])
+					continue;
+
+				m_pDepthBufferPixels[px + (py * m_Width)] = depthWeight;
+
+				finalColor = colorV0 * weightV0 + colorV1 * weightV1 + colorV2 * weightV2;
+
+				//Update Color in Buffer
+				finalColor.MaxToOne();
+
+				m_pBackBufferPixels[px + (py * m_Width)] = SDL_MapRGB(m_pBackBuffer->format,
+					static_cast<uint8_t>(finalColor.r * 255),
+					static_cast<uint8_t>(finalColor.g * 255),
+					static_cast<uint8_t>(finalColor.b * 255));
+			}
+		}
+	}
+}
+
+void dae::Renderer::Render_W2_Part2()
+{
+	std::vector<Mesh> meshes_world
+	{
+		Mesh{
+			{
+			Vertex{{-3,3,-2}},
+			Vertex{{0,3,-2}},
+			Vertex{{3,3,-2}},
+			Vertex{{-3,0,-2}},
+			Vertex{{0,0,-2}},
+			Vertex{{3,0,-2}},
+			Vertex{{-3,-3,-2}},
+			Vertex{{0,-3,-2}},
+			Vertex{{3,-3,-2}}
+			},
+
+			{
+				3,0,4,1,5,2,
+				2,6,
+				6,3,7,4,8,5
+			},
+
+		PrimitiveTopology::TriangleStrip
+		}
+	};
+
+}
+
+void dae::Renderer::Render_W2_Part3()
+{
+
+}
+
+void dae::Renderer::Render_W2_Part4()
+{
+
 }
 
 void dae::Renderer::ClearBackground() const
