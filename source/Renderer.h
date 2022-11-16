@@ -29,7 +29,7 @@ namespace dae
 		Renderer& operator=(Renderer&&) noexcept = delete;
 
 		void Update(Timer* pTimer);
-		void Render();
+		void Render() const;
 
 		bool SaveBufferToImage() const;
 
@@ -52,16 +52,16 @@ namespace dae
 		void VertexTransformationFunction_W1(const std::vector<Vertex>& vertices_in, std::vector<Vertex>& vertices_out) const; //W1 Version
 		void VertexTransformationFunction_W2(const std::vector<Mesh>& meshes_in, std::vector<Mesh>& meshes_out) const; //W1 Version
 
-		void Render_W1_Part1();
-		void Render_W1_Part2();
-		void Render_W1_Part3();
-		void Render_W1_Part4();
-		void Render_W1_Part5();
+		void Render_W1_Part1() const;
+		void Render_W1_Part2() const;
+		void Render_W1_Part3() const;
+		void Render_W1_Part4() const;
+		void Render_W1_Part5() const;
 
-		void Render_W2_Part1();
-		void Render_W2_Part2();
-		void Render_W2_Part3();
-		void Render_W2_Part4();
+		void Render_W2_Part1() const;
+		void Render_W2_Part2() const;
+		void Render_W2_Part3() const;
+		void Render_W2_Part4() const;
 
 		void ClearBackground() const;
 	};
