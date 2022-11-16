@@ -48,6 +48,8 @@ namespace dae
 		int m_Height{};
 		float m_AspectRatio{};
 
+		Texture* m_pUVGridTexture;
+
 		//Function that transforms the vertices from the mesh from World space to Screen space
 		void VertexTransformationFunction_W1(const std::vector<Vertex>& vertices_in, std::vector<Vertex>& vertices_out) const; //W1 Version
 		void VertexTransformationFunction_W2(const std::vector<Mesh>& meshes_in, std::vector<Mesh>& meshes_out) const; //W1 Version
