@@ -54,13 +54,13 @@ void Renderer::Render() const
 	//Render_W1_Part1();	// Rasterizer Stage Only
 	//Render_W1_Part2();	// Projection Stage (Camera)
 	//Render_W1_Part3();	// Barycentric Coordinates
-	Render_W1_Part4();	// Depth Buffer
+	//Render_W1_Part4();	// Depth Buffer
 	//Render_W1_Part5();	// BoundingBox Optimization
 
 	//Render_W2_Part1();	// QUAD (TriangleList)
 	//Render_W2_Part2();	//QUAD (TriangleStrip)
 	//Render_W2_Part3();	// Texture
-	//Render_W2_Part4();	// Correct Interpolation
+	Render_W2_Part4();	// Correct Interpolation
 
 	//@END
 	//Update SDL Surface
@@ -848,10 +848,6 @@ void dae::Renderer::Render_W2_Part3() const
 		const Vector2 v1 = { mesh.vertices[mesh.indices[i + 1]].position.x, mesh.vertices[mesh.indices[i + 1]].position.y };
 		const Vector2 v2 = { mesh.vertices[mesh.indices[i + 2]].position.x, mesh.vertices[mesh.indices[i + 2]].position.y };
 
-		ColorRGB colorV0 = mesh.vertices[mesh.indices[i]].color;
-		ColorRGB colorV1 = mesh.vertices[mesh.indices[i + 1]].color;
-		ColorRGB colorV2 = mesh.vertices[mesh.indices[i + 2]].color;
-
 		const Vector2 uvV0 = mesh.vertices[mesh.indices[i]].uv;
 		const Vector2 uvV1 = mesh.vertices[mesh.indices[i + 1]].uv;
 		const Vector2 uvV2 = mesh.vertices[mesh.indices[i + 2]].uv;
@@ -984,10 +980,6 @@ void dae::Renderer::Render_W2_Part4() const
 		const float depthV0 = mesh.vertices[mesh.indices[i]].position.z;
 		const float depthV1 = mesh.vertices[mesh.indices[i + 1]].position.z;
 		const float depthV2 = mesh.vertices[mesh.indices[i + 2]].position.z;
-
-		ColorRGB colorV0 = mesh.vertices[mesh.indices[i]].color;
-		ColorRGB colorV1 = mesh.vertices[mesh.indices[i + 1]].color;
-		ColorRGB colorV2 = mesh.vertices[mesh.indices[i + 2]].color;
 
 		const Vector2 uvV0 = mesh.vertices[mesh.indices[i]].uv;
 		const Vector2 uvV1 = mesh.vertices[mesh.indices[i + 1]].uv;
