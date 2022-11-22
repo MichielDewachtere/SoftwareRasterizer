@@ -32,7 +32,7 @@ namespace dae
 		Uint8 r{ 0 }, g{ 0 }, b{ 0 };
 
 		const int x = (int)(uv.x * m_pSurface->w);
-		const int y = (int)(uv.y * m_pSurface->w);
+		const int y = (int)(uv.y * m_pSurface->h);
 
 		const int idx{ x + y * m_pSurface->w };
 
