@@ -34,7 +34,7 @@ namespace dae
 		const int x = (int)(uv.x * m_pSurface->w);
 		const int y = (int)(uv.y * m_pSurface->w);
 
-		const int idx{ (int)(x + (y * m_pSurface->w)) };
+		const int idx{ x + y * m_pSurface->w };
 
 		SDL_GetRGB(m_pSurfacePixels[idx], m_pSurface->format, &r, &g, &b);
 
