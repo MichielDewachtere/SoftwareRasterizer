@@ -11,15 +11,17 @@ namespace dae
 	{
 		Camera() = default;
 
-		Camera(const Vector3& _origin, float _fovAngle):
-			origin{_origin},
-			fovAngle{_fovAngle}
+		Camera(const Vector3& _origin, float _fovAngle, float _aspectRatio) :
+			origin{ _origin },
+			fovAngle{ _fovAngle },
+			aspectRatio{ _aspectRatio }
 		{
 		}
 
 		Vector3 origin{};
 		float fovAngle{};
 		float fov{ tanf((fovAngle * TO_RADIANS) / 2.f) };
+		float aspectRatio{};
 
 		Vector3 forward{Vector3::UnitZ};
 		Vector3 up{Vector3::UnitY};
@@ -31,12 +33,16 @@ namespace dae
 		Matrix invViewMatrix{};
 		Matrix viewMatrix{};
 
-		void Initialize(float _fovAngle = 90.f, Vector3 _origin = {0.f,0.f,0.f})
+		Matrix projectionMatrix{};
+
+		void Initialize(float _fovAngle = 90.f, Vector3 _origin = {0.f,0.f,0.f}, float _aspectRatio = 1.f)
 		{
 			fovAngle = _fovAngle;
 			fov = tanf((fovAngle * TO_RADIANS) / 2.f);
 
 			origin = _origin;
+
+			aspectRatio = _aspectRatio;
 		}
 
 		void CalculateViewMatrix()
@@ -55,8 +61,20 @@ namespace dae
 
 		void CalculateProjectionMatrix()
 		{
-			//TODO W2
+			const float far{ 0.1f };
+			const float near{ 100.f };
+			
+			const float A{ far / (far - near) };
+			const float B{ -(far * near) / (far - near) };
 
+			projectionMatrix =
+			{
+				{1 / (fov * aspectRatio),0,0,0},
+				{0,1 / fov,0,0},
+				{0,0,A,1},
+				{0,0,B,0}
+			};
+			
 			//ProjectionMatrix => Matrix::CreatePerspectiveFovLH(...) [not implemented yet]
 			//DirectX Implementation => https://learn.microsoft.com/en-us/windows/win32/direct3d9/d3dxmatrixperspectivefovlh
 		}
@@ -79,9 +97,20 @@ namespace dae
 
 			//Update Matrices
 			CalculateViewMatrix();
-			CalculateProjectionMatrix(); //Try to optimize this - should only be called once or when fov/aspectRatio changes
+//			CalculateProjectionMatrix(fov, aspectRatio); //Try to optimize this - should only be called once or when fov/aspectRatio changes
 		}
 
+		void SetFovOrAspectRatio(const float newFovAngle, const float newAspectRatio)
+		{
+			fovAngle = newFovAngle;
+			fov = tanf((fovAngle * TO_RADIANS) / 2.f);
+
+			aspectRatio = newAspectRatio;
+
+			CalculateProjectionMatrix();
+		}
+
+	private:
 		void HandleKeyboardInput(float deltaTime, float moveSpeed)
 		{
 			const uint8_t* pKeyboardState = SDL_GetKeyboardState(nullptr);
