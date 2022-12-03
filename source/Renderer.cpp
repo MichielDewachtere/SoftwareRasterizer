@@ -166,6 +166,9 @@ void Renderer::VertexTransformationFunction_W3(const std::vector<Mesh>& meshes_i
 			vertexOut.position.y /= vertexOut.position.w;
 			vertexOut.position.z /= vertexOut.position.w;
 
+			// TODO: temporary fix, problem is probably in one of the matrices
+			vertexOut.position.z = 1 - vertexOut.position.z;
+
 			vertexOut.color = vertex.color;
 			vertexOut.normal = vertex.normal;
 			vertexOut.uv = vertex.uv;
