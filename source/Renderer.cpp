@@ -8,15 +8,20 @@
 #include "Matrix.h"
 #include "Texture.h"
 #include "Utils.h"
+#include "BRDF.h"
 #include <iostream>
 
 #define INT int
+
+//#define MESH_TUKTUK
+#define MESH_VEHICLE
 
 using namespace dae;
 
 Renderer::Renderer(SDL_Window* pWindow) :
 	m_pWindow(pWindow),
-	m_IsRotating(true)
+	m_IsRotating(true),
+	m_EnableNormalMap(true)
 {
 	//Initialize
 	SDL_GetWindowSize(pWindow, &m_Width, &m_Height);
@@ -37,19 +42,22 @@ Renderer::Renderer(SDL_Window* pWindow) :
 	m_Camera.Initialize(m_FovAngle, { .0f,.0f, 0.f }, m_AspectRatio);
 
 	m_pUVGridTexture = Texture::LoadFromFile("Resources/uv_grid_2.png");
+#ifdef MESH_TUKTUK
 	m_pTukTukTexture = Texture::LoadFromFile("resources/tuktuk.png");
 
+	TukTukMeshInit();
+#elif defined(MESH_VEHICLE)
 	m_pVehicleDiffuse = Texture::LoadFromFile("resources/vehicle_diffuse.png");
 	m_pVehicleNormalMap = Texture::LoadFromFile("resources/vehicle_normal.png");
 	m_pGlossinessMap = Texture::LoadFromFile("resources/vehicle_gloss.png");
 	m_pSpecularMap = Texture::LoadFromFile("resources/vehicle_specular.png");
 
+	VehicleMeshInit();
+#endif
 	m_CurrentDisplayMode = DisplayMode::FinalColor;
 	m_CurrentShadingMode = ShadingMode::Combined;
 
-	TukTukMeshInit();
-	VehicleMeshInit();
-}	
+}
 
 Renderer::~Renderer()
 {
@@ -69,8 +77,11 @@ void Renderer::Update(Timer* pTimer)
 	if (m_IsRotating)
 	{
 		const float rotationSpeed{ 30 * TO_RADIANS };
-		//m_TukTukMesh.worldMatrix = Matrix::CreateRotationY(rotationSpeed * pTimer->GetElapsed()) * m_TukTukMesh.worldMatrix;
+#ifdef MESH_TUKTUK
+		m_TukTukMesh.worldMatrix = Matrix::CreateRotationY(rotationSpeed * pTimer->GetElapsed()) * m_TukTukMesh.worldMatrix;
+#elif defined(MESH_VEHICLE)
 		m_VehicleMesh.worldMatrix = Matrix::CreateRotationY(rotationSpeed * pTimer->GetElapsed()) * m_VehicleMesh.worldMatrix;
+#endif
 	}
 }
 
@@ -87,14 +98,15 @@ void Renderer::Render() const
 	//Render_W1_Part5();	// BoundingBox Optimization
 
 	//Render_W2_Part1();	// QUAD (TriangleList)
-	//Render_W2_Part2();	//QUAD (TriangleStrip)
+	//Render_W2_Part2();	// QUAD (TriangleStrip)
 	//Render_W2_Part3();	// Texture
 	//Render_W2_Part4();	// Correct Interpolation
 
-	//Render_W3();
-
+#ifdef MESH_TUKTUK
+	Render_W3();
+#elif defined(MESH_VEHICLE)
 	Render_W4();
-
+#endif
 	//@END
 	//Update SDL Surface
 	SDL_UnlockSurface(m_pBackBuffer);
@@ -155,30 +167,21 @@ void Renderer::VertexTransformationFunction_W2(const std::vector<Mesh>& meshes_i
 		}
 	}
 }
-void Renderer::VertexTransformationFunction_W3(const std::vector<Mesh>& meshes_in, std::vector<Mesh>& meshes_out) const
+void Renderer::VertexTransformationFunction_W3(std::vector<Mesh>& meshes) const
 {
-	meshes_out.clear();
-	meshes_out.reserve(meshes_in.size());
-
-	for (size_t meshIdx{}; meshIdx < meshes_in.size(); ++meshIdx)
+	for (auto& m : meshes)
 	{
-		Mesh mesh = meshes_in[meshIdx];
+		m.vertices_out.clear();
+		m.vertices_out.reserve(m.vertices.size());
 
-		meshes_out.push_back(mesh);
-		meshes_out[meshIdx].vertices.clear();
-		meshes_out[meshIdx].vertices.reserve(mesh.vertices.size());
-		meshes_out[meshIdx].vertices_out.clear();
-		meshes_out[meshIdx].vertices_out.reserve(mesh.vertices.size());
-		
-		for (size_t vertexIdx{}; vertexIdx < mesh.vertices.size(); ++vertexIdx)
+		Matrix worldViewProjectionMatrix = m.worldMatrix * m_Camera.viewMatrix * m_Camera.projectionMatrix;
+
+		for (const auto& v : m.vertices)
 		{
-			Matrix worldViewProjectionMatrix = mesh.worldMatrix * m_Camera.viewMatrix * m_Camera.projectionMatrix;
-
-			Vertex vertex = mesh.vertices[vertexIdx];
 			Vertex_Out vertexOut{};
 
 			// to NDC-Space
-			vertexOut.position = worldViewProjectionMatrix.TransformPoint(vertex.position.ToVector4());
+			vertexOut.position = worldViewProjectionMatrix.TransformPoint(v.position.ToVector4());
 
 			vertexOut.position.x /= vertexOut.position.w;
 			vertexOut.position.y /= vertexOut.position.w;
@@ -187,12 +190,9 @@ void Renderer::VertexTransformationFunction_W3(const std::vector<Mesh>& meshes_i
 			// TODO: temporary fix, problem is probably in one of the matrices
 			vertexOut.position.z = 1 - vertexOut.position.z;
 
-			vertexOut.color = vertex.color;
-			vertexOut.normal = vertex.normal;
-			vertexOut.uv = vertex.uv;
-			vertexOut.tangent = vertex.tangent;
+			vertexOut.uv = v.uv;
 
-			meshes_out[meshIdx].vertices_out.emplace_back(vertexOut);
+			m.vertices_out.emplace_back(vertexOut);
 		}
 	}
 }
@@ -236,9 +236,9 @@ void Renderer::PixelShading(Vertex_Out& v) const
 {
 	ColorRGB tempColor{ colors::Black };
 
-	const Vector3 lightDirection = { .577f,-.577f,.577f };
-	const Vector3 directionToLight = -lightDirection;
+	const Vector3 directionToLight = -Vector3{ .577f,-.577f,.577f };
 	const float lightIntensity = 7.f;
+	const float specularShininess = 25.f;
 
 	Vector3 normal;
 
@@ -267,21 +267,14 @@ void Renderer::PixelShading(Vertex_Out& v) const
 
 	const ColorRGB observedArea = { lambertCos, lambertCos, lambertCos };
 	////////////////////
-	
-	// lambert diffuse
-	const ColorRGB diffuse = 1 * m_pVehicleDiffuse->Sample(v.uv) / PI;
-	////////////////////
+
+	ColorRGB diffuse;
 
 	// phong specular
-	const float specularShininess = 25.f;
-
-	const Vector3 reflect = Vector3::Reflect(directionToLight, normal);
-	const float cosAlpha = Vector3::Dot(reflect, v.viewDirection);
-
 	const ColorRGB gloss = m_pGlossinessMap->Sample(v.uv);
 	const float exponent = gloss.r * specularShininess;
 
-	const ColorRGB specular = m_pSpecularMap->Sample(v.uv) * std::powf(cosAlpha, exponent);
+	ColorRGB specular;
 	////////////////////////
 
 
@@ -291,12 +284,19 @@ void Renderer::PixelShading(Vertex_Out& v) const
 		tempColor += observedArea;
 		break;
 	case ShadingMode::Diffuse:
+		diffuse = BRDF::Lambert(m_pVehicleDiffuse->Sample(v.uv));
+
 		tempColor += diffuse * observedArea * lightIntensity;
 		break;
 	case ShadingMode::Specular:
-		tempColor += specular * observedArea * lightIntensity;
+		specular = BRDF::Phong(m_pSpecularMap->Sample(v.uv), exponent, directionToLight, v.viewDirection, normal);
+
+		tempColor += specular * observedArea;
 		break;
-	case ShadingMode::Combined:
+	case ShadingMode::Combined:		 
+		specular = BRDF::Phong(m_pSpecularMap->Sample(v.uv), exponent, directionToLight, v.viewDirection, normal);
+		diffuse = BRDF::Lambert(m_pVehicleDiffuse->Sample(v.uv));
+
 		tempColor += diffuse * observedArea * lightIntensity + specular;
 		break;
 	}
@@ -1260,29 +1260,19 @@ void Renderer::Render_W3() const
 
 	ClearBackground();
 	
-	const std::vector<Mesh> meshes_world{ m_TukTukMesh };
+	std::vector<Mesh> meshes_world{ m_TukTukMesh };
 
-	std::vector<Mesh> meshes_NDC;
+	VertexTransformationFunction_W3(meshes_world);
 
-	std::vector<Mesh> meshes_raster;
-
-
-
-	meshes_NDC.resize(meshes_world.size());
-
-	meshes_raster.resize(meshes_world.size());
-
-	VertexTransformationFunction_W3(meshes_world, meshes_NDC);
-
-	for (size_t i{}; i < meshes_NDC.size(); ++i)
+	for (auto& m : meshes_world)
 	{
 		switch (m_TukTukMesh.primitiveTopology)
 		{
 		case PrimitiveTopology::TriangleList:
-			RenderTriangleListW3(meshes_NDC[i]);
+			RenderTriangleListW3(m);
 			break;
 		case PrimitiveTopology::TriangleStrip:
-			RenderTriangleStripW3(meshes_NDC[i]);
+			RenderTriangleStripW3(m);
 			break;
 		}
 	}
@@ -1291,41 +1281,33 @@ void Renderer::Render_W3() const
 void Renderer::RenderTriangleListW3(Mesh& mesh) const
 {
 	ColorRGB finalColor{ };
-	
+
 	for (size_t i{}; i < mesh.indices.size(); i += 3)
 	{
+		Vertex_Out vOut0 = mesh.vertices_out[mesh.indices[i]];
+		Vertex_Out vOut1 = mesh.vertices_out[mesh.indices[i + 1]];
+		Vertex_Out vOut2 = mesh.vertices_out[mesh.indices[i + 2]];
+
 		// frustum culling check
-		if (!IsInFrustum(mesh.vertices_out[mesh.indices[i]])
-			|| !IsInFrustum(mesh.vertices_out[mesh.indices[i + 1]])
-			|| !IsInFrustum(mesh.vertices_out[mesh.indices[i + 2]]))
-			continue;	
+		if (!IsInFrustum(vOut0)
+			|| !IsInFrustum(vOut1)
+			|| !IsInFrustum(vOut2))
+			continue;
 
 		// from NDC space to Raster space
-		NDCToRaster(mesh.vertices_out[mesh.indices[i]]);
-		NDCToRaster(mesh.vertices_out[mesh.indices[i + 1]]);
-		NDCToRaster(mesh.vertices_out[mesh.indices[i + 2]]);
+		NDCToRaster(vOut0);
+		NDCToRaster(vOut1);
+		NDCToRaster(vOut2);
 
-		const Vector2 v0 = {mesh.vertices_out[mesh.indices[i]].position.x, mesh.vertices_out[mesh.indices[i]].position.y };
-		const Vector2 v1 = {mesh.vertices_out[mesh.indices[i + 1]].position.x, mesh.vertices_out[mesh.indices[i + 1]].position.y };
-		const Vector2 v2 = {mesh.vertices_out[mesh.indices[i + 2]].position.x, mesh.vertices_out[mesh.indices[i + 2]].position.y };
-
-		const float depthV0 = mesh.vertices_out[mesh.indices[i]].position.z;
-		const float depthV1 = mesh.vertices_out[mesh.indices[i + 1]].position.z;
-		const float depthV2 = mesh.vertices_out[mesh.indices[i + 2]].position.z;
-
-		const float wV0 = mesh.vertices_out[mesh.indices[i]].position.w;
-		const float wV1 = mesh.vertices_out[mesh.indices[i + 1]].position.w;
-		const float wV2 = mesh.vertices_out[mesh.indices[i + 2]].position.w;
-
-		const Vector2 uvV0 = mesh.vertices_out[mesh.indices[i]].uv;
-		const Vector2 uvV1 = mesh.vertices_out[mesh.indices[i + 1]].uv;
-		const Vector2 uvV2 = mesh.vertices_out[mesh.indices[i + 2]].uv;
+		const Vector2 v0 = { vOut0.position.x, vOut0.position.y };
+		const Vector2 v1 = { vOut1.position.x, vOut1.position.y };
+		const Vector2 v2 = { vOut2.position.x, vOut2.position.y };
 
 		const Vector2 edge01 = v1 - v0;
 		const Vector2 edge12 = v2 - v1;
 		const Vector2 edge20 = v0 - v2;
 
-		const float areaTriangle = Vector2::Cross(v1 - v0, v2 - v0);
+		const float reversedAreaTriangle = 1 / Vector2::Cross(edge01, edge12);
 
 		// create bounding box for triangle
 		const INT top = std::max((INT)std::max(v0.y, v1.y), (INT)v2.y);
@@ -1351,12 +1333,14 @@ void Renderer::RenderTriangleListW3(Mesh& mesh) const
 			{
 				finalColor = colors::Black;
 
-				Vector2 pixel = { (float)px,(float)py };
+				Vector2 pixelPos = { (float)px,(float)py };
 
-				const Vector2 directionV0 = pixel - v0;
-				const Vector2 directionV1 = pixel - v1;
-				const Vector2 directionV2 = pixel - v2;
+				const Vector2 directionV0 = pixelPos - v0;
+				const Vector2 directionV1 = pixelPos - v1;
+				const Vector2 directionV2 = pixelPos - v2;
 
+				// weights are all negative => back-face culling
+				// vs all positive => front-face culling
 				float weightV2 = Vector2::Cross(edge01, directionV0);
 				if (weightV2 < 0)
 					continue;
@@ -1369,30 +1353,31 @@ void Renderer::RenderTriangleListW3(Mesh& mesh) const
 				if (weightV1 < 0)
 					continue;
 
-				weightV0 /= areaTriangle;
-				weightV1 /= areaTriangle;
-				weightV2 /= areaTriangle;
+				weightV0 *= reversedAreaTriangle;
+				weightV1 *= reversedAreaTriangle;
+				weightV2 *= reversedAreaTriangle;
 
-				if (weightV0 + weightV1 + weightV2 < 1 - FLT_EPSILON
-					&& weightV0 + weightV1 + weightV2 > 1 + FLT_EPSILON)
+				if (weightV0 + weightV1 + weightV2 < 1
+					&& weightV0 + weightV1 + weightV2 > 1)
 					continue;
 
 				// This Z-BufferValue is the one we compare in the Depth Test and
 				// the value we store in the Depth Buffer (uses position.z).
-				const float interpolatedZDepthWeight = {
+				float interpolatedZDepth = {
 					1.f /
-					((1 / depthV0) * weightV0 +
-					(1 / depthV1) * weightV1 +
-					(1 / depthV2) * weightV2)
+					((1 / vOut0.position.z) * weightV0 +
+					(1 / vOut1.position.z) * weightV1 +
+					(1 / vOut2.position.z) * weightV2)
 				};
 
-				if (interpolatedZDepthWeight < 0 || interpolatedZDepthWeight > 1)
+				if (interpolatedZDepth < 0 || interpolatedZDepth > 1)
 					continue;
 
-				if (interpolatedZDepthWeight > m_pDepthBufferPixels[px + (py * m_Width)])
+
+				if (interpolatedZDepth > m_pDepthBufferPixels[px + (py * m_Width)])
 					continue;
 
-				m_pDepthBufferPixels[px + (py * m_Width)] = interpolatedZDepthWeight;
+				m_pDepthBufferPixels[px + (py * m_Width)] = interpolatedZDepth;
 
 				switch (m_CurrentDisplayMode)
 				{
@@ -1400,17 +1385,17 @@ void Renderer::RenderTriangleListW3(Mesh& mesh) const
 				{
 					// When we want to interpolate vertex attributes with a correct depth(color, uv, normals, etc.),
 					// we still use the View Space depth(uses position.w)
-					const float interpolatedWDepthWeight = {
+					const float interpolatedWDepth = {
 						1.f /
-						((1 / wV0) * weightV0 +
-						(1 / wV1) * weightV1 +
-						(1 / wV2) * weightV2)
+						((1 / vOut0.position.w) * weightV0 +
+						(1 / vOut1.position.w) * weightV1 +
+						(1 / vOut2.position.w) * weightV2)
 					};
 
 					const Vector2 interpolatedUV = {
-						((uvV0 / wV0) * weightV0 +
-						(uvV1 / wV1) * weightV1 +
-						(uvV2 / wV2) * weightV2) * interpolatedWDepthWeight
+						((vOut0.uv / vOut0.position.w) * weightV0 +
+						(vOut1.uv / vOut1.position.w) * weightV1 +
+						(vOut2.uv / vOut2.position.w) * weightV2) * interpolatedWDepth
 					};
 
 					finalColor = m_pTukTukTexture->Sample(interpolatedUV);
@@ -1589,15 +1574,15 @@ void Renderer::Render_W4() const
 
 	VertexTransformationFunction_W4(meshes_world);
 
-	for (size_t i{}; i < meshes_world.size(); ++i)
+	for (auto& m : meshes_world)
 	{
 		switch (m_VehicleMesh.primitiveTopology)
 		{
 		case PrimitiveTopology::TriangleList:
-			RenderTriangleListW4(meshes_world[i]);
+			RenderTriangleListW4(m);
 			break;
 		case PrimitiveTopology::TriangleStrip:
-			RenderTriangleStripW4(meshes_world[i]);
+			RenderTriangleStripW4(m);
 			break;
 		}
 	}

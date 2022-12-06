@@ -86,7 +86,7 @@ namespace dae
 		//Function that transforms the vertices from the mesh from World space to Screen space
 		void VertexTransformationFunction_W1(const std::vector<Vertex>& vertices_in, std::vector<Vertex>& vertices_out) const; //W1 Version
 		void VertexTransformationFunction_W2(const std::vector<Mesh>& meshes_in, std::vector<Mesh>& meshes_out) const;	//W2 Version
-		void VertexTransformationFunction_W3(const std::vector<Mesh>& meshes_in, std::vector<Mesh>& meshes_out) const;	//W3 Version
+		void VertexTransformationFunction_W3(std::vector<Mesh>& meshes) const;	//W3 Version
 		void VertexTransformationFunction_W4(std::vector<Mesh>& meshes) const;	//W4 Version
 
 		void PixelShading(Vertex_Out& v) const;
