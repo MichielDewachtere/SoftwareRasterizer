@@ -119,5 +119,8 @@ namespace dae
 		void SetFovAngle(const float newFovAngle);
 		void SetAspectRatio(const float newAspectRatio);
 		void ClearBackground() const;
+
+
+		void DepthRemap(float& depth, float topPercentile) const;
 	};
 }

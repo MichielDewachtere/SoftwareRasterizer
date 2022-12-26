@@ -20,7 +20,7 @@ using namespace dae;
 
 Renderer::Renderer(SDL_Window* pWindow) :
 	m_pWindow(pWindow),
-	m_IsRotating(true),
+	m_IsRotating(false),
 	m_EnableNormalMap(true)
 {
 	//Initialize
@@ -36,17 +36,18 @@ Renderer::Renderer(SDL_Window* pWindow) :
 	// This way the Camera::CalculateProjectionMatrix is only called when the FOV or AspectRatio is changed
 	// see definition 
 	SetAspectRatio((float)m_Width / (float)m_Height);
-	SetFovAngle(60.f);
 
-	//Initialize Camera
-	m_Camera.Initialize(m_FovAngle, { .0f,.0f, 0.f }, m_AspectRatio);
 
 	m_pUVGridTexture = Texture::LoadFromFile("Resources/uv_grid_2.png");
 #ifdef MESH_TUKTUK
+	SetFovAngle(60.f);
+
 	m_pTukTukTexture = Texture::LoadFromFile("resources/tuktuk.png");
 
 	TukTukMeshInit();
 #elif defined(MESH_VEHICLE)
+	SetFovAngle(45.f);
+
 	m_pVehicleDiffuse = Texture::LoadFromFile("resources/vehicle_diffuse.png");
 	m_pVehicleNormalMap = Texture::LoadFromFile("resources/vehicle_normal.png");
 	m_pGlossinessMap = Texture::LoadFromFile("resources/vehicle_gloss.png");
@@ -54,6 +55,10 @@ Renderer::Renderer(SDL_Window* pWindow) :
 
 	VehicleMeshInit();
 #endif
+
+	//Initialize Camera
+	m_Camera.Initialize(m_FovAngle, { .0f,.0f, 0.f }, m_AspectRatio);
+
 	m_CurrentDisplayMode = DisplayMode::FinalColor;
 	m_CurrentShadingMode = ShadingMode::Combined;
 
@@ -76,7 +81,7 @@ void Renderer::Update(Timer* pTimer)
 
 	if (m_IsRotating)
 	{
-		const float rotationSpeed{ 30 * TO_RADIANS };
+		constexpr float rotationSpeed{ 30 * TO_RADIANS };
 #ifdef MESH_TUKTUK
 		m_TukTukMesh.worldMatrix = Matrix::CreateRotationY(rotationSpeed * pTimer->GetElapsed()) * m_TukTukMesh.worldMatrix;
 #elif defined(MESH_VEHICLE)
@@ -212,20 +217,17 @@ void Renderer::VertexTransformationFunction_W4(std::vector<Mesh>& meshes) const
 			// to NDC-Space
 			vertexOut.position = worldViewProjectionMatrix.TransformPoint(v.position.ToVector4());
 
-			vertexOut.viewDirection = Vector3{ vertexOut.position.GetXYZ()};
+			vertexOut.viewDirection = Vector3{ vertexOut.position.GetXYZ() };
 			vertexOut.viewDirection.Normalize();
 
 			vertexOut.position.x /= vertexOut.position.w;
 			vertexOut.position.y /= vertexOut.position.w;
 			vertexOut.position.z /= vertexOut.position.w;
 
-			// TODO: temporary fix, problem is probably in one of the matrices
-			vertexOut.position.z = 1 - vertexOut.position.z;
-
 			vertexOut.color = v.color;
-			vertexOut.normal = m.worldMatrix.TransformVector(v.normal);
+			vertexOut.normal = m.worldMatrix.TransformVector(v.normal).Normalized();
 			vertexOut.uv = v.uv;
-			vertexOut.tangent = m.worldMatrix.TransformVector(v.tangent);
+			vertexOut.tangent = m.worldMatrix.TransformVector(v.tangent).Normalized();
 
 			m.vertices_out.emplace_back(vertexOut);
 		}
@@ -237,8 +239,8 @@ void Renderer::PixelShading(Vertex_Out& v) const
 	ColorRGB tempColor{ colors::Black };
 
 	const Vector3 directionToLight = -Vector3{ .577f,-.577f,.577f };
-	const float lightIntensity = 7.f;
-	const float specularShininess = 25.f;
+	constexpr float lightIntensity = 7.f;
+	constexpr float specularShininess = 25.f;
 
 	Vector3 normal;
 
@@ -254,7 +256,7 @@ void Renderer::PixelShading(Vertex_Out& v) const
 
 		sampledNormal = tangentSpaceAxis.TransformVector(sampledNormal);
 
-		normal = sampledNormal;
+		normal = sampledNormal.Normalized();
 		////////////////////
 	}
 	else
@@ -276,7 +278,6 @@ void Renderer::PixelShading(Vertex_Out& v) const
 
 	ColorRGB specular;
 	////////////////////////
-
 
 	switch (m_CurrentShadingMode)
 	{
@@ -301,7 +302,7 @@ void Renderer::PixelShading(Vertex_Out& v) const
 		break;
 	}
 
-	const ColorRGB ambient = { .025f,.025f,.025f };
+	constexpr ColorRGB ambient = { .025f,.025f,.025f };
 
 	tempColor += ambient;
 
@@ -1323,7 +1324,7 @@ void Renderer::RenderTriangleListW3(Mesh& mesh) const
 		if (bottom <= 0 || top >= m_Height - 1)
 			continue;
 
-		const INT offSet{ 1 };
+		constexpr INT offSet{ 1 };
 
 		// iterate over every pixel in the bounding box, with an offset we enlarge the BB
 		// in case of overlooked pixels
@@ -1633,7 +1634,7 @@ void Renderer::RenderTriangleListW4(Mesh& mesh) const
 		if (bottom <= 0 || top >= m_Height - 1)
 			continue;
 
-		const INT offSet{ 1 };
+		constexpr INT offSet{ 1 };
 
 		// iterate over every pixel in the bounding box, with an offset we enlarge the BB
 		// in case of overlooked pixels
@@ -1742,8 +1743,8 @@ void Renderer::RenderTriangleListW4(Mesh& mesh) const
 				}
 				case DisplayMode::DepthBuffer:
 				{
-					const float depthBufferColor = Remap(m_pDepthBufferPixels[px + (py * m_Width)], 0.985f, 1.0f);
-
+					const float depthBufferColor = Remap(m_pDepthBufferPixels[px + (py * m_Width)], 0.995f, 1.0f);
+					
 					finalColor = { depthBufferColor, depthBufferColor, depthBufferColor };
 					break;
 				}
@@ -1759,6 +1760,14 @@ void Renderer::RenderTriangleListW4(Mesh& mesh) const
 			}
 		}
 	}
+}
+
+void Renderer::DepthRemap(float& depth, float topPercentile) const
+{
+	depth = (depth - (1.f - topPercentile)) / topPercentile;
+
+	depth = std::max(0.f, depth);
+	depth = std::min(1.f, depth);
 }
 
 void Renderer::RenderTriangleStripW4(const Mesh& mesh) const
@@ -1927,8 +1936,8 @@ void Renderer::TukTukMeshInit()
 	Utils::ParseOBJ("Resources/tuktuk.obj", m_TukTukMesh.vertices, m_TukTukMesh.indices);
 
 	const Vector3 position{ m_Camera.origin + Vector3{ 0.0f, -3.0f, 15.0f } };
-	const Vector3 rotation{ Vector3{0,0,0 } };
-	const Vector3 scale{ Vector3{ 0.5f, 0.5f, 0.5f } };
+	const Vector3 rotation{ 0,0,0 };
+	const Vector3 scale{ 0.5f, 0.5f, 0.5f };
 
 	m_TukTukMesh.worldMatrix = Matrix::CreateScale(scale) * Matrix::CreateRotation(rotation) * Matrix::CreateTranslation(position);
 	m_TukTukMesh.primitiveTopology = PrimitiveTopology::TriangleList;
@@ -1939,7 +1948,7 @@ void Renderer::VehicleMeshInit()
 	Utils::ParseOBJ("Resources/vehicle.obj", m_VehicleMesh.vertices, m_VehicleMesh.indices);
 
 	const Vector3 position{ m_Camera.origin + Vector3{ 0.0f, 0.0f, 50.f } };
-	const Vector3 rotation{ Vector3{0, 90 * TO_RADIANS, 0 } };
+	const Vector3 rotation{ Vector3{0, 0, 0 } };
 	const Vector3 scale{ Vector3{ 1.f, 1.f, 1.f } };
 
 	m_VehicleMesh.worldMatrix = Matrix::CreateScale(scale) * Matrix::CreateRotation(rotation) * Matrix::CreateTranslation(position);
@@ -1978,6 +1987,4 @@ void Renderer::ToggleDisplayMode()
 void Renderer::ToggleShadingMode()
 {
 	m_CurrentShadingMode = ShadingMode{ ((int)m_CurrentShadingMode + 1) % 4 };
-
-	std::cout << (int)m_CurrentShadingMode << '\n';
 }

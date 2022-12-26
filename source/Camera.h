@@ -61,8 +61,8 @@ namespace dae
 
 		void CalculateProjectionMatrix()
 		{
-			const float far{ 0.1f };
-			const float near{ 100.f };
+			const float near{ 0.1f };
+			const float far{ 100.f };
 			
 			const float A{ far / (far - near) };
 			const float B{ -(far * near) / (far - near) };
